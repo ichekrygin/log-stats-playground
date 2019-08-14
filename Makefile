@@ -26,25 +26,25 @@ help: ## print Makefile targets doc's
 $(TARGET): $(SRC)
 	@go build $(LDFLAGS) -o $(TARGET)
 
-build: $(TARGET) ## build partybox binary
+build: $(TARGET) ## build log-stats-playground binary
 	@true
 
 test: lint ## run unit tests
 	@go test $$(go list ./...)
 
-clean: ## remove partybox binary
+clean: ## remove log-stats-playground binary
 	@rm -f $(TARGET)
 
-install: ## install partybox
+install: ## install log-stats-playground
 	@go install $(LDFLAGS)
 
-uninstall: clean ## unistall partybox
+uninstall: clean ## unistall log-stats-playground
 	@rm -f $$(which ${TARGET})
 
-vet: ## vet partybox
-	go vet $(SRC)
+vet: ## vet log-stats-playground
+	@go vet ./...
 
-fmt: ## format partybox
+fmt: ## format log-stats-playground
 	@gofmt -l -w $(SRC)
 
 simplify: ## auot-fix format/import and lint issues whenever possible
@@ -53,13 +53,13 @@ simplify: ## auot-fix format/import and lint issues whenever possible
 	# fix linting issues (whenever possible)
 	@$(GOLINTER) run --fix
 
-imports: $(GOIMPORTS) ## check partybox formatting or die
+imports: $(GOIMPORTS) ## check log-stats-playground formatting or die
 	@goimports_out=$$($(GOIMPORTS) -d -e $(SRC) 2>&1) && [ -z "$${goimports_out}" ] || (echo "$${goimports_out}" 1>&2 && false)
 
-lint: $(GOLINTER) ## run linter on partybox
+lint: $(GOLINTER) ## run linter on log-stats-playground
 	@$(GOLINTER) run
 
-run: install ## run partybox app
+run: install ## run log-stats-playground app
 	@$(TARGET) < sample_csv.txt
 
 $(GOIMPORTS):

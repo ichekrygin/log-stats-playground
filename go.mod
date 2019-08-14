@@ -1,4 +1,4 @@
-module github.com/ichekrygin/partybox
+module github.com/ichekrygin/log-stats-playground
 
 go 1.12
 

@@ -1,5 +1,5 @@
-# Partybox
-Partybox is a log parser application 
+# Log-Stats-Playground
+Log-Stats-Playground is a log parser application 
 
 ## Requirements
 - Go `go1.12.5` (with `GO111MODULE=on`)
@@ -13,22 +13,22 @@ partybox
 ## Building
 
 ```bash
-git clone github.com/ichekrygin/partybox.git
-cd partybox
+git clone github.com/ichekrygin/log-stats-playground.git
+cd log-stats-playground
 make help
 ---
-build                          build partybox binary
-clean                          remove partybox binary
-fmt                            format partybox
+build                          build log-stats-playground binary
+clean                          remove log-stats-playground binary
+fmt                            format log-stats-playground
 help                           print Makefile targets doc's
-imports                        check partybox formatting or die
-install                        install partybox
-lint                           run linter on partybox
-run                            run partybox app
+imports                        check log-stats-playground formatting or die
+install                        install log-stats-playground
+lint                           run linter on log-stats-playground
+run                            run log-stats-playground app
 simplify                       auot-fix format/import and lint issues whenever possible
 test                           run unit tests
-uninstall                      unistall partybox
-vet                            vet partybox
+uninstall                      unistall log-stats-playground
+vet                            vet log-stats-playground
 ```
 
 ## Assumptions
@@ -42,5 +42,5 @@ make run
 
 Using provided example file
 ```bash
-partybox < sample_csv.txt
+log-stats-playground < sample_csv.txt
 ```

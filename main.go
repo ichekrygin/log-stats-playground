@@ -4,7 +4,7 @@ import (
 	"bufio"
 	"os"
 
-	"github.com/ichekrygin/partybox/pkg/monitor"
+	"github.com/ichekrygin/log-stats-playground/pkg/monitor"
 	log "github.com/sirupsen/logrus"
 )
 
