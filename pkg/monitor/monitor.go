@@ -46,13 +46,13 @@ func newEntry(data []string) (*entry, error) {
 	}, nil
 }
 
-// segment - fixed range segment window with start time, total and per section hits count
+// Segment - fixed range Segment window with start time, total and per section hits Count
 type segment struct {
-	// segment start time
+	// Segment start time
 	start time.Time
-	// segment total tits
+	// Segment total tits
 	total int
-	// segment hits count per section
+	// Segment hits Count per section
 	hits map[string]int
 }
 
@@ -73,13 +73,13 @@ func (s *segment) addSection(section string) {
 
 // segmentCount tuple
 type segmentCount struct {
-	segment string
-	count   int
+	Segment string
+	Count   int
 }
 
-// topSegments returns top N segments in descending order by count.
+// topSections returns top N segments in descending order by Count.
 // If N > segments length, return all segments
-func (s *segment) topSegments(n int) []segmentCount {
+func (s *segment) topSections(n int) []segmentCount {
 	var data []segmentCount
 
 	for k, v := range s.hits {
@@ -87,7 +87,7 @@ func (s *segment) topSegments(n int) []segmentCount {
 	}
 
 	sort.Slice(data, func(i, j int) bool {
-		return data[i].count < data[j].count
+		return data[i].Count < data[j].Count
 	})
 
 	// Reverse
@@ -114,7 +114,7 @@ func (a *alert) check(value float64) bool {
 	return a.currentState
 }
 
-// Process data with provided alert threshold level for average hits count
+// Process data with provided alert threshold level for average hits Count
 func Process(s *bufio.Scanner, alertThreshold float64) error {
 	alert := &alert{
 		threshold: alertThreshold,
@@ -128,7 +128,7 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 
 	var seg *segment
 
-	// Running total of all requests per segment to retrieve the total of number
+	// Running total of all requests per Segment to retrieve the total of number
 	// of request for a given time window
 	// TODO: consider alternative data structure in terms of memory efficiency
 	var runningSum []int
@@ -150,8 +150,8 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 		// TODO: other considerations - use sliding window
 		if seg == nil || rec.ts.Sub(seg.start) > segmentDuration {
 			if seg != nil {
-				// Report stats for last segment
-				logrus.Infof("%02d sec stats: %v", segmentDuration/time.Second, seg.topSegments(3))
+				// Report stats for last Segment
+				logrus.Infof("%02d sec stats: %v", segmentDuration/time.Second, seg.topSections(3))
 
 				prevSum := 0
 				if sumLen := len(runningSum); sumLen > 1 {
@@ -176,16 +176,16 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 
 				}
 			}
-			// Starting a new segment
+			// Starting a new Segment
 			seg = newSegment(rec.ts)
 		}
 
 		seg.addSection(rec.section)
 	}
 
-	// Report last segment
+	// Report last Segment
 	if seg != nil {
-		logrus.Infof("10 sec stats: %v", seg.topSegments(3))
+		logrus.Infof("10 sec stats: %v", seg.topSections(3))
 	}
 
 	// return scanner error (if any)
