@@ -3,10 +3,13 @@ package monitor
 import (
 	"bufio"
 	"os"
+	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/pkg/errors"
 )
 
 const (
@@ -19,6 +22,22 @@ const (
 "10.0.0.4","-","apache",1549573859,"GET /api/help HTTP/1.0",200,1234
 `
 )
+
+func EquateErrors() cmp.Option {
+	return cmp.Comparer(func(a, b error) bool {
+		if a == nil || b == nil {
+			return a == nil && b == nil
+		}
+
+		av := reflect.ValueOf(a)
+		bv := reflect.ValueOf(b)
+		if av.Type() != bv.Type() {
+			return false
+		}
+
+		return a.Error() == b.Error()
+	})
+}
 
 //  Overall test - if I dont have time for more granular tests
 func TestProcess(t *testing.T) {
@@ -174,6 +193,65 @@ func Test_alert_check(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			if got := tt.alert.check(tt.args); got != tt.want {
 				t.Errorf("check() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func Test_newEntry(t *testing.T) {
+	type want struct {
+		entry *entry
+		err   error
+	}
+	tests := map[string]struct {
+		args []string
+		want want
+	}{
+		"Default": {
+			args: []string{"\"10.0.0.2\"", "\"-\"", "\"apache\"", "1549573860", "\"GET /api/user HTTP/1.0\"", "200", "1234"},
+			want: want{
+				entry: &entry{
+					TimeStamp: time.Unix(1549573860, 0),
+					Method:    "GET",
+					Path:      "/api/user",
+					Section:   "api",
+				},
+				err: nil,
+			},
+		},
+		"EmpytData": {
+			args: []string{},
+			want: want{
+				err: errors.Errorf("malformed input, expected 7 elements, got: %v", []string{}),
+			},
+		},
+		"MalformedTimestamp": {
+			args: []string{"\"10.0.0.2\"", "\"-\"", "\"apache\"", "154957x860", "\"GET /api/user HTTP/1.0\"", "200", "1234"},
+			want: want{
+				err: errors.Errorf("malformed input, invalid timestamp value: %v", "154957x860"),
+			},
+		},
+		"MalformedRequest": {
+			args: []string{"\"10.0.0.2\"", "\"-\"", "\"apache\"", "1549573860", "\"GET /api/user\"", "200", "1234"},
+			want: want{
+				err: errors.Errorf("malformed request data: %s", "\"GET /api/user\""),
+			},
+		},
+		"MalformedRequestPath": {
+			args: []string{"\"10.0.0.2\"", "\"-\"", "\"apache\"", "1549573860", "\"GET x HTTP/1.0\"", "200", "1234"},
+			want: want{
+				err: errors.Errorf("malformed request Path: %s", "x"),
+			},
+		},
+	}
+	for name, tt := range tests {
+		t.Run(name, func(t *testing.T) {
+			got, err := newEntry(tt.args)
+			if diff := cmp.Diff(err, tt.want.err, EquateErrors()); diff != "" {
+				t.Errorf("newEntry() error %s", diff)
+			}
+			if diff := cmp.Diff(got, tt.want.entry); diff != "" {
+				t.Errorf("newEntry() %s", diff)
 			}
 		})
 	}

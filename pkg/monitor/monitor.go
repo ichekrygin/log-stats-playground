@@ -13,19 +13,22 @@ import (
 
 // entry - minimalistic data structure for log entry record
 type entry struct {
-	ts      time.Time
-	method  string
-	path    string
-	section string
+	TimeStamp time.Time
+	Method    string
+	Path      string
+	Section   string
 }
 
 // newEntry - parse the data to return entry value
 //"remotehost","rfc931","authuser","date","request","status","bytes"
 //"10.0.0.2","-","apache",1549573860,"GET /api/user HTTP/1.0",200,1234
 func newEntry(data []string) (*entry, error) {
+	if len(data) < 7 {
+		return nil, errors.Errorf("malformed input, expected 7 elements, got: %v", data)
+	}
 	ts, err := strconv.ParseInt(data[3], 10, 64)
 	if err != nil {
-		return nil, err
+		return nil, errors.Errorf("malformed input, invalid timestamp value: %s", data[3])
 	}
 
 	requestFields := strings.Split(data[4], " ")
@@ -35,24 +38,24 @@ func newEntry(data []string) (*entry, error) {
 
 	pathFields := strings.Split(requestFields[1], "/")
 	if len(pathFields) < 2 {
-		return nil, errors.Errorf("malform request path: %s", requestFields)
+		return nil, errors.Errorf("malformed request Path: %s", requestFields[1])
 	}
 
 	return &entry{
-		ts:      time.Unix(ts, 0),
-		method:  requestFields[0],
-		path:    requestFields[1],
-		section: pathFields[1],
+		TimeStamp: time.Unix(ts, 0),
+		Method:    requestFields[0][1:],
+		Path:      requestFields[1],
+		Section:   pathFields[1],
 	}, nil
 }
 
-// Segment - fixed range Segment window with start time, total and per section hits Count
+// Segment - fixed range Segment window with start time, total and per Section hits Count
 type segment struct {
 	// Segment start time
 	start time.Time
 	// Segment total tits
 	total int
-	// Segment hits Count per section
+	// Segment hits Count per Section
 	hits map[string]int
 }
 
@@ -148,7 +151,7 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 
 		// Fixed range window
 		// TODO: other considerations - use sliding window
-		if seg == nil || rec.ts.Sub(seg.start) > segmentDuration {
+		if seg == nil || rec.TimeStamp.Sub(seg.start) > segmentDuration {
 			if seg != nil {
 				// Report stats for last Segment
 				logrus.Infof("%02d sec stats: %v", segmentDuration/time.Second, seg.topSections(3))
@@ -168,19 +171,19 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 					// Check alert state change and report if needed
 					if avg, cur := float64(totalRequests)/float64(segmentsPerAlertWindow), alert.currentState; cur != alert.check(avg) {
 						if alert.currentState {
-							logrus.Infof("alert - hits: %f, triggered at: %s", avg, rec.ts.Format(time.RFC3339))
+							logrus.Infof("alert - hits: %f, triggered at: %s", avg, rec.TimeStamp.Format(time.RFC3339))
 						} else {
-							logrus.Infof("alert - hits: %f, reset at: %s", avg, rec.ts.Format(time.RFC3339))
+							logrus.Infof("alert - hits: %f, reset at: %s", avg, rec.TimeStamp.Format(time.RFC3339))
 						}
 					}
 
 				}
 			}
 			// Starting a new Segment
-			seg = newSegment(rec.ts)
+			seg = newSegment(rec.TimeStamp)
 		}
 
-		seg.addSection(rec.section)
+		seg.addSection(rec.Section)
 	}
 
 	// Report last Segment
