@@ -1,5 +1,5 @@
 # Partybox
-Partybox is an awesome place where everybody have a good time!
+Partybox is a log parser application 
 
 ## Requirements
 - Go `go1.12.5` (with `GO111MODULE=on`)
@@ -31,5 +31,16 @@ uninstall                      unistall partybox
 vet                            vet partybox
 ```
 
-## Links and References
-https://sahilm.com/makefiles-for-golang/
+## Assumptions
+- File records are in chronological order
+
+## Run
+Using `Makefile` `run` target
+```bash
+make run
+```
+
+Using provided example file
+```bash
+partybox < sample_csv.txt
+```

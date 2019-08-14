@@ -4,7 +4,7 @@ SHELL := /bin/bash
 TARGET := $(shell echo $${PWD\#\#*/})
 .DEFAULT_GOAL: $(TARGET)
 
-SRC = main.go
+SRC = main.go pkg
 
 # These will be provided to the target
 VERSION := 1.0.0
@@ -30,7 +30,7 @@ build: $(TARGET) ## build partybox binary
 	@true
 
 test: lint ## run unit tests
-	@go test ./...
+	@go test $$(go list ./...)
 
 clean: ## remove partybox binary
 	@rm -f $(TARGET)
@@ -60,7 +60,7 @@ lint: $(GOLINTER) ## run linter on partybox
 	@$(GOLINTER) run
 
 run: install ## run partybox app
-	@$(TARGET)
+	@$(TARGET) < sample_csv.txt
 
 $(GOIMPORTS):
 	@go get -u golang.org/x/tools/cmd/goimports
