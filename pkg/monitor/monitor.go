@@ -11,18 +11,18 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// entry - minimalistic data structure for log entry record
-type entry struct {
+// Entry - minimalistic data structure for log Entry record
+type Entry struct {
 	TimeStamp time.Time
 	Method    string
 	Path      string
 	Section   string
 }
 
-// newEntry - parse the data to return entry value
+// NewEntry - parse the data to return Entry value
 //"remotehost","rfc931","authuser","date","request","status","bytes"
 //"10.0.0.2","-","apache",1549573860,"GET /api/user HTTP/1.0",200,1234
-func newEntry(data []string) (*entry, error) {
+func NewEntry(data []string) (*Entry, error) {
 	if len(data) < 7 {
 		return nil, errors.Errorf("malformed input, expected 7 elements, got: %v", data)
 	}
@@ -41,7 +41,7 @@ func newEntry(data []string) (*entry, error) {
 		return nil, errors.Errorf("malformed request Path: %s", requestFields[1])
 	}
 
-	return &entry{
+	return &Entry{
 		TimeStamp: time.Unix(ts, 0),
 		Method:    requestFields[0][1:],
 		Path:      requestFields[1],
@@ -49,44 +49,44 @@ func newEntry(data []string) (*entry, error) {
 	}, nil
 }
 
-// Segment - fixed range Segment window with start time, total and per Section hits Count
-type segment struct {
+// Segment - fixed range Segment window with start time, Total and per Section hits Count
+type Segment struct {
 	// Segment start time
 	start time.Time
-	// Segment total tits
+	// Segment Total hits
 	total int
 	// Segment hits Count per Section
 	hits map[string]int
 }
 
-// newSegment with start time
-func newSegment(t time.Time) *segment {
-	return &segment{
+// NewSegment with start time
+func NewSegment(t time.Time) *Segment {
+	return &Segment{
 		start: t,
 		hits:  make(map[string]int),
 		total: 0,
 	}
 }
 
-// addSection - increment counters
-func (s *segment) addSection(section string) {
+// AddSection - increment counters
+func (s *Segment) AddSection(section string) {
 	s.hits[section]++
 	s.total++
 }
 
-// segmentCount tuple
-type segmentCount struct {
+// SegmentCount tuple
+type SegmentCount struct {
 	Segment string
 	Count   int
 }
 
-// topSections returns top N segments in descending order by Count.
+// TopSections returns top N segments in descending order by Count.
 // If N > segments length, return all segments
-func (s *segment) topSections(n int) []segmentCount {
-	var data []segmentCount
+func (s *Segment) TopSections(n int) []SegmentCount {
+	var data []SegmentCount
 
 	for k, v := range s.hits {
-		data = append(data, segmentCount{k, v})
+		data = append(data, SegmentCount{k, v})
 	}
 
 	sort.Slice(data, func(i, j int) bool {
@@ -105,43 +105,81 @@ func (s *segment) topSections(n int) []segmentCount {
 	return data
 }
 
-// alert - helper structure to keep track of threshold and current state
-type alert struct {
+// Alert - helper structure to keep track of threshold and current state
+type Alert struct {
 	currentState bool
 	threshold    float64
 }
 
-// check - sets and returns current state based on the incoming value
-func (a *alert) check(value float64) bool {
+// Check - sets and returns current state based on the incoming value
+func (a *Alert) Check(value float64, ts time.Time) {
+	oldState := a.currentState
 	a.currentState = value > a.threshold
-	return a.currentState
+	if oldState != a.currentState {
+		if a.currentState {
+			logrus.Infof("Alert - hits: %f, triggered at: %s", value, ts.Format(time.RFC3339))
+		} else {
+			logrus.Infof("Alert - hits: %f, reset at: %s", value, ts.Format(time.RFC3339))
+		}
+	}
 }
 
-// Process data with provided alert threshold level for average hits Count
-func Process(s *bufio.Scanner, alertThreshold float64) error {
-	alert := &alert{
-		threshold: alertThreshold,
+type Span struct {
+	sums            []int
+	segmentsInSpan  int
+	segmentIndex    int
+	segmentDuration time.Duration
+	alert           *Alert
+}
+
+func NewSpan(segmentSeconds, spanSeconds int, alertThreshold float64) (*Span, error) {
+	segmentsInSpan := spanSeconds / segmentSeconds
+	if segmentsInSpan < 1 {
+		return nil, errors.Errorf("Invalid Segment/Span seconds values combination: %d, %d", segmentSeconds, spanSeconds)
 	}
-	// TODO: parameterize this
-	segmentDuration := 10 * time.Second
 
-	// how many segments in a given alert window
-	// 2 minutes / 10 = 12 segments
-	segmentsPerAlertWindow := 2 * 60 / 10
+	return &Span{
+		sums:            make([]int, segmentsInSpan),
+		segmentsInSpan:  segmentsInSpan,
+		segmentIndex:    segmentsInSpan,
+		segmentDuration: time.Duration(segmentSeconds) * time.Second,
+		alert: &Alert{
+			currentState: false,
+			threshold:    alertThreshold,
+		},
+	}, nil
+}
 
-	var seg *segment
+func (s *Span) curIndex() int {
+	return (len(s.sums) + s.segmentIndex) % len(s.sums)
+}
 
-	// Running total of all requests per Segment to retrieve the total of number
-	// of request for a given time window
-	// TODO: consider alternative data structure in terms of memory efficiency
-	var runningSum []int
+func (s *Span) prevIndex() int {
+	return (len(s.sums) + s.segmentIndex - 1) % len(s.sums)
+}
+
+func (s *Span) Update(n int, ts time.Time) {
+	tmp := -s.sums[s.curIndex()]
+	s.sums[s.curIndex()] = n + s.sums[s.prevIndex()]
+	s.segmentIndex++
+
+	s.alert.Check(float64(tmp+s.sums[s.curIndex()])/float64(s.segmentsInSpan), ts)
+}
+
+func (s *Span) Total() int {
+	return s.sums[s.curIndex()]
+}
+
+// Process data with provided Alert threshold level for average hits Count
+func Process(s *bufio.Scanner, span *Span) error {
+	var seg *Segment
 
 	s.Scan() // skip the first line
 
 	for s.Scan() {
 		text := s.Text()
 
-		rec, err := newEntry(strings.Split(text, ","))
+		rec, err := NewEntry(strings.Split(text, ","))
 		if err != nil {
 			// TODO: other considerations
 			// 	- skip all bad records
@@ -150,45 +188,22 @@ func Process(s *bufio.Scanner, alertThreshold float64) error {
 		}
 
 		// Fixed range window
-		// TODO: other considerations - use sliding window
-		if seg == nil || rec.TimeStamp.Sub(seg.start) > segmentDuration {
+		if seg == nil || rec.TimeStamp.Sub(seg.start) > span.segmentDuration {
 			if seg != nil {
+				span.Update(seg.total, rec.TimeStamp)
 				// Report stats for last Segment
-				logrus.Infof("%02d sec stats: %v", segmentDuration/time.Second, seg.topSections(3))
-
-				prevSum := 0
-				if sumLen := len(runningSum); sumLen > 1 {
-					prevSum = runningSum[sumLen-1]
-				}
-				runningSum = append(runningSum, seg.total+prevSum)
-
-				if sumLen := len(runningSum); sumLen > segmentsPerAlertWindow-1 {
-					totalRequests := runningSum[sumLen-1]
-					if sumLen > segmentsPerAlertWindow-1 {
-						totalRequests -= runningSum[sumLen-segmentsPerAlertWindow]
-					}
-
-					// Check alert state change and report if needed
-					if avg, cur := float64(totalRequests)/float64(segmentsPerAlertWindow), alert.currentState; cur != alert.check(avg) {
-						if alert.currentState {
-							logrus.Infof("alert - hits: %f, triggered at: %s", avg, rec.TimeStamp.Format(time.RFC3339))
-						} else {
-							logrus.Infof("alert - hits: %f, reset at: %s", avg, rec.TimeStamp.Format(time.RFC3339))
-						}
-					}
-
-				}
+				logrus.Infof("%02d sec stats: %v, %v", span.segmentDuration/time.Second, seg.TopSections(3), span.Total())
 			}
 			// Starting a new Segment
-			seg = newSegment(rec.TimeStamp)
+			seg = NewSegment(rec.TimeStamp)
 		}
 
-		seg.addSection(rec.Section)
+		seg.AddSection(rec.Section)
 	}
 
 	// Report last Segment
 	if seg != nil {
-		logrus.Infof("10 sec stats: %v", seg.topSections(3))
+		logrus.Infof("%02d sec stats: %v, %v", span.segmentDuration/time.Second, seg.TopSections(3), span.Total())
 	}
 
 	// return scanner error (if any)

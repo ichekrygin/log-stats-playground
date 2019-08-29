@@ -11,7 +11,12 @@ import (
 // TODO: parameterize alert threshold value
 func main() {
 	scanner := bufio.NewScanner(os.Stdin)
-	if err := monitor.Process(scanner, 100.0); err != nil {
+	span, err := monitor.NewSpan(10, 120, 10.0)
+	if err != nil {
+		log.Fatal(err.Error(), "failed setting up monitor")
+	}
+
+	if err := monitor.Process(scanner, span); err != nil {
 		log.Fatal(err.Error(), "failed processing data")
 	}
 }
